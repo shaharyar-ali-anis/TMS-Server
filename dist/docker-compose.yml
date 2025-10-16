@@ -1,0 +1,122 @@
+services:
+  # --- MongoDB (single-node replica set) ---
+  mongodb:
+    image: mongo:7
+    container_name: mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - /opt/hazen-stack/mongodb/data:/data/db
+      - /opt/hazen-stack/mongodb/keyfile:/opt/keyfile:ro
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: admin6754
+    command:
+      - --bind_ip_all
+      - --replSet
+      - rs0
+      - --keyFile
+      - /opt/keyfile
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  mongo-rs-init:
+    image: mongo:7
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: admin6754
+    entrypoint:
+      - bash
+      - -c
+      - |
+        # small delay beyond healthcheck to avoid race on rs.initiate
+        sleep 10
+        for i in {1..10}; do
+          if mongosh "mongodb://admin:admin6754@mongodb:27017/admin" --eval "
+            try {
+              rs.status();
+              print('Replica set already initialized');
+              quit(0);
+            } catch (e) {
+              if (e.codeName === 'NotYetInitialized') {
+                print('Initializing replica set...');
+                rs.initiate({ _id: 'rs0', members: [ { _id: 0, host: 'mongodb:27017' } ] });
+                print('Replica set initialized successfully');
+                quit(0);
+              } else {
+                print('Error checking replica set status: ' + e);
+                quit(1);
+              }
+            }
+          "; then
+            break
+          else
+            echo "Attempt $$i failed, retrying in 5s..."
+            sleep 5
+          fi
+        done
+    restart: "no"
+
+  # --- MinIO ---
+  minio:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    container_name: minio
+    restart: unless-stopped
+    ports:
+      - "9000:9000"  # S3 API
+      - "9001:9001"  # Console
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: admin6754
+    volumes:
+      - /opt/hazen-stack/minio/data:/data
+      - /opt/hazen-stack/minio/config:/root/.minio
+    command: server /data --console-address ":9001"
+
+  # --- Mosquitto MQTT (TCP only, password auth) ---
+  mosquitto:
+    image: eclipse-mosquitto
+    container_name: mosquitto
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
+    volumes:
+      - /opt/hazen-stack/mosquitto/config:/mosquitto/config
+      - /opt/hazen-stack/mosquitto/data:/mosquitto/data
+      - /opt/hazen-stack/mosquitto/log:/mosquitto/log
+    healthcheck:
+      # include creds and escape $SYS for compose (use $$SYS)
+      test: ["CMD-SHELL", "mosquitto_sub -h 127.0.0.1 -p 1883 -u admin -P admin6754 -t '$$SYS/broker/uptime' -C 1 -W 10 >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+# --- API Service ---
+  api:
+    image: waleed5/trafficapi:v1.4.5
+    container_name: api
+    restart: unless-stopped
+    ports:
+      - "8080:5247"
+
+  # --- Web Service (MVC; server-side calls) ---
+  web:
+    image: waleed5/trafficapp:v1.5.2
+    container_name: web
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    extra_hosts:
+    - "host.docker.internal:host-gateway"
+    environment:
+      API_BaseURL: "http://api:5247/"
+      WS_BaseURL: "ws://host.docker.internal:1880/"
+
