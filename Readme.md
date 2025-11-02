@@ -96,9 +96,9 @@ cd ~/ems_setup
 
 ### Upload installation files
 
-1. On your local machine, download all setup files from the shared Google Drive folder:
+1. On your local machine, download all setup files located in the `Dist` folder of the following Github Repo:
 
-   * [https://drive.google.com/drive/folders/1iePCDKLPqBkrbBPInRzLjdH5sIctOyz4?usp=sharing](https://drive.google.com/drive/folders/1iePCDKLPqBkrbBPInRzLjdH5sIctOyz4?usp=sharing)
+   * [Github Repo: TMS-Server](https://github.com/shaharyar-ali-anis/TMS-Server/tree/main/dist)
 2. Once downloaded, use FileZilla (or any SFTP tool) to **upload the contents** into the target server’s folder:
 
    ```bash
