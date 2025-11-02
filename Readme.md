@@ -218,10 +218,10 @@ sudo apt update && sudo apt install -y mongodb-database-tools
 ```
 
 ### Restore Databases
-Adjust `ubuntu` to match your actual username if needed.
+Adjust `<your_user>` to match your actual username if needed.
 ```bash
-mongorestore --host localhost:27017 -u admin -p admin6754 --authenticationDatabase admin --db portal_db   --archive=/home/ubuntu/ems_setup/portal_db.agz --gzip
-mongorestore --host localhost:27017 -u admin -p admin6754 --authenticationDatabase admin --db traffic_data --archive=/home/ubuntu/ems_setup/traffic_data.agz --gzip
+mongorestore --host localhost:27017 -u admin -p admin6754 --authenticationDatabase admin --db portal_db   --archive=/home/<your_user>/ems_setup/portal_db.agz --gzip
+mongorestore --host localhost:27017 -u admin -p admin6754 --authenticationDatabase admin --db traffic_data --archive=/home/<your_user>/ems_setup/traffic_data.agz --gzip
 ```
 
 ### Verify Collections
@@ -288,10 +288,10 @@ sudo apt install -y nodejs npm && sudo npm install -g pm2@latest
 ```
 
 ### Move Files & Set Permissions
-Adjust `ubuntu` to match your actual username if needed.
+Adjust `<your_user>` to match your actual username if needed.
 ```bash
-sudo mv /home/ubuntu/ems_setup/gateway/{config.env,gateway-linux} /opt/hazen-stack/gateway/
-sudo mv /home/ubuntu/ems_setup/ws-publisher/{config.env,WS-Publisher-linux} /opt/hazen-stack/ws-publisher/
+sudo mv /home/<your_user>/ems_setup/gateway/{config.env,gateway-linux} /opt/hazen-stack/gateway/
+sudo mv /home/<your_user>/ems_setup/ws-publisher/{config.env,WS-Publisher-linux} /opt/hazen-stack/ws-publisher/
 sudo chmod +x /opt/hazen-stack/gateway/gateway-linux /opt/hazen-stack/ws-publisher/WS-Publisher-linux
 ```
 
@@ -381,6 +381,13 @@ Login using the **Test account**:
 | Login ID | op1@hazen.ai |
 | Password | hazen123 |
 
+Credentials for Camera:
+| Parameter | Value |
+|------------|--------|
+| MQTT Broker |\<Server-IP> |
+| MQTT username | admin |
+| MQTT password | admin6754 |
+
 On the dashboard, you should see live events every 60 seconds or so.
 
 <img src="http://hazen-tms.s3.dualstack.me-central-1.amazonaws.com/files/assets/Dashboard.jpg" alt="Dashboard" width="800">
@@ -418,7 +425,7 @@ sudo rm -rf /home/<your_user>/ems_setup
   ```bash
   sudo docker ps | grep minio
   ```
-  Access the MinIO console at `http://<server-ip>:9001`. login using ID `admin` PW `admin6754`
+  Access the MinIO console at `http://<Server-IP>:9001`. login using ID `admin` PW `admin6754`
 * Validate MQTT connection:
   ```bash
   sudo docker logs mosquitto | tail -n 20
@@ -428,7 +435,7 @@ sudo rm -rf /home/<your_user>/ems_setup
 ## ✅ Final Checklist
 
 * [ ] All containers are running (`docker ps`)
-* [ ] Portal loads at `http://<server-ip>`
+* [ ] Portal loads at `http://<Server-IP>`
 * [ ] Virtual Camera's events are received
 * [ ] Production device ID with its client prefix is configuired on the actual Camera
 
