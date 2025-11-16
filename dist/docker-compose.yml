@@ -101,7 +101,7 @@ services:
 
 # --- API Service ---
   api:
-    image: waleed5/trafficapi:v1.4.5
+    image: waleed5/trafficapi:v1.4.6
     container_name: api
     restart: unless-stopped
     ports:
@@ -109,7 +109,7 @@ services:
 
   # --- Web Service (MVC; server-side calls) ---
   web:
-    image: waleed5/trafficapp:v1.5.2
+    image: waleed5/trafficapp:v2.0.5
     container_name: web
     restart: unless-stopped
     ports:
