@@ -109,7 +109,7 @@ services:
 
   # --- Web Service (MVC; server-side calls) ---
   web:
-    image: waleed5/trafficapp:v2.0.5
+    image: waleed5/trafficapp:v2.0.6
     container_name: web
     restart: unless-stopped
     ports:
