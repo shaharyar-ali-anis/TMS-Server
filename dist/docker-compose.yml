@@ -113,7 +113,7 @@ services:
     container_name: web
     restart: unless-stopped
     ports:
-      - "80:80"
+      - "80:8080"
     extra_hosts:
     - "host.docker.internal:host-gateway"
     environment:
