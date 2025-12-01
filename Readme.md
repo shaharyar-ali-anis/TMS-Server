@@ -29,6 +29,7 @@ Make sure the following ports are open on your server:
 | 1883 | MQTT Broker   | IoT message broker      |
 | 9000 | MinIO         | Object storage (images) |
 | 9001 | MinIO Console | Management portal       |
+| 8081 | Mongo Express | Debug GUI for MongoDB   |
 
 ---
 
@@ -109,7 +110,7 @@ cd ~/ems_setup
    * `gateway/` and `ws-publisher/` directories
    * `virtual_cam/` directory
    * `portal_db.agz` and `traffic_data.agz` database archives
-
+   * `mongo-express.sh` (debug helper script)
 ### Create base directory structure for runtime data
 
 These directories are used by running services (they are not temporary):
@@ -118,13 +119,16 @@ These directories are used by running services (they are not temporary):
 sudo mkdir -p /opt/hazen-stack/{minio/{data,config},mongodb/data,mosquitto/{config,data,log},api,gateway,ws-publisher}
 ```
 
-### Move docker-compose.yml to permanent location
+### Move `docker-compose.yml` and `mongo-express.sh` to permanent location
 
-Before starting any containers, move the `docker-compose.yml` file out of the temporary setup folder so it is retained for future management:
+Before starting any containers, move the `docker-compose.yml` & `mongo-express.sh` file out of the temporary setup folder so it is retained for future management:
 
 ```bash
 sudo mv ~/ems_setup/docker-compose.yml /opt/hazen-stack/docker-compose.yml
+sudo mv ~/ems_setup/mongo-express.sh /opt/hazen-stack/mongo-express.sh
+sudo chmod +x /opt/hazen-stack/mongo-express.sh
 ```
+`mongo-express.sh` provides a temporary Mongo Express GUI for debugging.
 
 > **Note:** The `docker-compose.yml` file defines all container services and must remain under `/opt/hazen-stack` for future restarts using:
 >
@@ -430,6 +434,20 @@ sudo rm -rf /home/<your_user>/ems_setup
   ```bash
   sudo docker logs mosquitto | tail -n 20
   ````
+* If you need to inspect or debug documents inside MongoDB collections, you can launch a temporary Mongo Express GUI:
+
+**Start Mongo Express:**
+  ```bash
+  cd /opt/hazen-stack
+  sudo ./mongo-express.sh
+  ````
+**Access the GUI:**
+
+Access the Mongo Express at `http://<Server-IP>:8081`. login using ID `admin` PW `1qaz!QAZ`
+
+**Note:** *The container runs temporarily and is automatically removed when closed. 
+Use this only for debugging. It is not part of permanent EMS services.*
+
 ---
 
 ## ✅ Final Checklist
