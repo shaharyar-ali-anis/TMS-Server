@@ -1,0 +1,14 @@
+{
+    "Rules": [
+        {
+            "ID": "DeleteObjectsAfter1Day",
+            "Filter": {
+                "Prefix": ""
+            },
+            "Status": "Enabled",
+            "Expiration": {
+                "Days": 90
+            }
+        }
+    ]
+}
