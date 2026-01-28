@@ -130,14 +130,8 @@ sudo chmod +x /opt/hazen-stack/mongo-express.sh
 ```
 `mongo-express.sh` provides a temporary Mongo Express GUI for debugging.
 
-> **Note:** The `docker-compose.yml` file defines all container services and must remain under `/opt/hazen-stack` for future restarts using:
->
-> ```bash
-> cd /opt/hazen-stack
-> sudo docker compose up -d
-> sudo docker compose down
-> sudo docker compose ps
-> ```
+**Note:** The `docker-compose.yml` file defines all container services and must remain under `/opt/hazen-stack` for future restarts using:
+
 
 ---
 
@@ -528,5 +522,5 @@ Use this only for debugging. It is not part of permanent EMS services.*
 ---
 
 **Author:** Hazen.ai Operations Team
-**Version:** v1.2
-**Date:** December 2025
+**Version:** v1.3
+**Date:** 28 Jan 2026
