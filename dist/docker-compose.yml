@@ -101,7 +101,7 @@ services:
 
 # --- API Service ---
   api:
-    image: waleed5/trafficapi:v1.4.9
+    image: waleed5/trafficapi:v1.5.5
     container_name: api
     environment:
       ConnectionString: "mongodb://admin:admin6754@mongodb:27017/"
@@ -111,7 +111,7 @@ services:
 
   # --- Web Service (MVC; server-side calls) ---
   web:
-    image: waleed5/trafficapp:v2.1.3
+    image: waleed5/trafficapp:v2.1.7
     container_name: web
     restart: unless-stopped
     ports:
