@@ -166,10 +166,14 @@ sudo chmod 400 /opt/hazen-stack/mongodb/keyfile
 sudo tee /opt/hazen-stack/mosquitto/config/mosquitto.conf > /dev/null <<'EOF'
 persistence true
 persistence_location /mosquitto/data/
-log_dest file /mosquitto/log/mosquitto.log
 listener 1883 0.0.0.0
 allow_anonymous false
 password_file /mosquitto/config/passwordfile
+log_dest stdout
+connection_messages true
+log_type error
+log_type warning
+log_type notice
 EOF
 ```
 
