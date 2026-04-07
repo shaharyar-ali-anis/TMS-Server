@@ -104,7 +104,7 @@ services:
 
 # --- API Service ---
   api:
-    image: waleed5/trafficapi:v1.5.5
+    image: waleed5/trafficapi:v1.5.7
     container_name: api
     depends_on:
       mongodb:
@@ -116,16 +116,9 @@ services:
     restart: unless-stopped
     ports:
       - "8080:5247"
-    healthcheck:
-      test: ["CMD-SHELL", "grep -q ':147F' /proc/net/tcp /proc/net/tcp6 || exit 1"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 15s
-
   # --- Web Service (MVC; server-side calls) ---
   web:
-    image: waleed5/trafficapp:v2.1.7
+    image: waleed5/trafficapp:v2.2.0
     container_name: web
     depends_on:
       - api
@@ -137,9 +130,3 @@ services:
     environment:
       API_BaseURL: "http://api:5247/"
       WS_BaseURL: "ws://host.docker.internal:1880/"
-    healthcheck:
-      test: ["CMD-SHELL", "grep -q ':1F90' /proc/net/tcp /proc/net/tcp6 || exit 1"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 15s
