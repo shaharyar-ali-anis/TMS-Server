@@ -13,7 +13,7 @@ All shell commands are provided in **copy-paste friendly code blocks**.
 ### System Requirements
 
 * Ubuntu Server/Desktop 24.04.2 LTS
-* Minimum: 4 CPU cores, 8 GB RAM, 100 GB disk space + 500GB disk space for image store *(adjust as per instructions in section 13)*
+* Minimum: 4 CPU cores, 8 GB RAM, 100 GB disk space + 500GB disk space for image store *(adjust as per instructions in section 12)*
 * Internet access for package and image downloads
 
 ### Required Ports
@@ -95,6 +95,7 @@ mkdir -p ~/ems_setup
 cd ~/ems_setup
 ```
 
+
 ### Upload installation files
 
 1. On your local machine, download all setup files located in the `Dist` folder of the following Github Repo:
@@ -111,12 +112,13 @@ cd ~/ems_setup
    * `virtual_cam/` directory
    * `portal_db.agz` and `traffic_data.agz` database archives
    * `mongo-express.sh` (debug helper script)
+
 ### Create base directory structure for runtime data
 
 These directories are used by running services (they are not temporary):
 
 ```bash
-sudo mkdir -p /opt/hazen-stack/{minio/{data,config},mongodb/data,mosquitto/{config,data,log},api,gateway,ws-publisher}
+sudo mkdir -p /opt/hazen-stack/{minio/{data,config},mongodb/data,mosquitto/{config,data},api,gateway,ws-publisher}
 ```
 
 ### Move `docker-compose.yml` and `mongo-express.sh` to permanent location
@@ -130,9 +132,61 @@ sudo chmod +x /opt/hazen-stack/mongo-express.sh
 ```
 `mongo-express.sh` provides a temporary Mongo Express GUI for debugging.
 
-**Note:** The `docker-compose.yml` file defines all container services and must remain under `/opt/hazen-stack` for future restarts using:
+**Note:** The `docker-compose.yml` file defines all container services and must remain under `/opt/hazen-stack` for future restarts
 
+### Docker Hub Login for Private Images
 
+Before pulling private Docker images, login to Docker Hub using the provided Docker organization access token.
+
+1. Create a protected secrets directory:
+
+   ```bash
+   sudo mkdir -p /opt/hazen-stack/secrets
+   ```
+
+2. Create the token file:
+
+   ```bash
+   sudo nano /opt/hazen-stack/secrets/docker-token
+   ```
+
+3. Paste only the Docker organization access token into the file, then save it.
+
+   Example file content:
+
+   ```text
+   dckr_pat_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+   ```
+
+   Do not include quotes, spaces, labels, or extra lines.
+
+4. Restrict file permissions:
+
+   ```bash
+   sudo chmod 600 /opt/hazen-stack/secrets/docker-token
+   ```
+
+5. Set ownership for the server user
+
+   Adjust `ubuntu` to match your actual username if needed.
+
+   ```bash
+   sudo chown ubuntu:ubuntu /opt/hazen-stack/secrets/docker-token
+   ```
+
+6. Login to Docker Hub:
+
+   ```bash
+   sudo cat /opt/hazen-stack/secrets/docker-token | sudo docker login \
+     --username hazenai \
+     --password-stdin
+   ```
+   **Note:** This login is saved on the server and normally does not need to be repeated unless the token is changed or revoked.
+
+7. Verify Docker loing
+   ```bash
+   sudo docker info | grep Username
+   ```
 ---
 
 ## 4. Set Ownership & Permissions
@@ -329,7 +383,7 @@ sudo env "PATH=$PATH" pm2 startup systemd
 
 ## 11. Test the System with Virtual Camera
 
-### Relocate the Virtual Camera App to production folder ###
+### Relocate the Virtual Camera App to production folder
 Move VirtualCam out of the temporary setup directory into a permanent runtime path.
 
 Adjust `<your_user>` to match your actual username if needed.
@@ -367,7 +421,7 @@ From any browser on the same network, visit:
 http://<Server-IP>
 ```
 
-Login using the **Test account**:
+### Login using the **Test account**:
 
 | Parameter | Value |
 |------------|--------|
@@ -383,17 +437,17 @@ Credentials for Camera:
 
 On the dashboard, you should see live events every 60 seconds or so.
 
-<img src="http://hazen-tms.s3.dualstack.me-central-1.amazonaws.com/files/assets/Dashboard.jpg" alt="Dashboard" width="800">
+<img src="https://github.com/shaharyar-ali-anis/TMS-Server/blob/main/images/Dashboard.jpg" alt="dashboard-image" width="800">
 
 \
 On the **ALPR & Violations** page, you can view the history of captured events:
 
-<img src="http://hazen-tms.s3.dualstack.me-central-1.amazonaws.com/files/assets/Records.jpg" alt="Records" width="800">
+<img src="https://github.com/shaharyar-ali-anis/TMS-Server/blob/main/images/Records.jpg" alt="records-image" width="800">
 
 \
 Ensure that each event’s images appear correctly:
 
-<img src="http://hazen-tms.s3.dualstack.me-central-1.amazonaws.com/files/assets/VehicleImage.jpg" alt="Event Image" width="800">
+<img src="https://github.com/shaharyar-ali-anis/TMS-Server/blob/main/images/VehicleImage.jpg" alt="event-Image" width="800">
 
 ---
 ## 12. Storage Management for Images in MinIO Object Store
@@ -502,14 +556,14 @@ sudo rm -rf /home/<your_user>/ems_setup
 * Validate MQTT connection:
   ```bash
   sudo docker logs mosquitto | tail -n 20
-  ````
+  ```
 * If you need to inspect or debug documents inside MongoDB collections, you can launch a temporary Mongo Express GUI:
 
 **Start Mongo Express:**
   ```bash
   cd /opt/hazen-stack
   sudo ./mongo-express.sh
-  ````
+  ```
 **Access the GUI:**
 
 Access the Mongo Express at `http://<Server-IP>:8081`. login using ID `admin` PW `1qaz!QAZ`
@@ -529,5 +583,5 @@ Use this only for debugging. It is not part of permanent EMS services.*
 ---
 
 **Author:** Hazen.ai Operations Team
-**Version:** v1.3
-**Date:** 28 Jan 2026
+**Version:** v1.4
+**Date:** 29th April 2026
