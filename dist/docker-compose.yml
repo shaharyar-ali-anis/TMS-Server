@@ -82,7 +82,7 @@ services:
 
   # --- Mosquitto MQTT (TCP only, password auth) ---
   mosquitto:
-    image: eclipse-mosquitto:2.1.2
+    image: eclipse-mosquitto:2
     container_name: mosquitto
     restart: unless-stopped
     ports:

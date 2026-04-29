@@ -174,9 +174,12 @@ connection_messages true
 log_type error
 log_type warning
 log_type notice
+log_type information
+max_packet_size 20971520
+message_size_limit 20971520
 EOF
 ```
-
+**Note:** Maximum image size limited to 20MB
 ### Create Password File
 
 ```bash
