@@ -104,7 +104,7 @@ services:
 
 # --- API Service ---
   api:
-    image: hazenai/tms-api:2.3.2
+    image: hazenai/tms-api:1.5.10
     container_name: api
     depends_on:
       mongodb:
@@ -118,7 +118,7 @@ services:
       - "8080:5247"
   # --- Web Service (MVC; server-side calls) ---
   web:
-    image: hazenai/tms-web:2.3.2
+    image: hazenai/tms-web:2.3.5
     container_name: web
     depends_on:
       - api
