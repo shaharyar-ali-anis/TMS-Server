@@ -82,7 +82,7 @@ services:
 
   # --- Mosquitto MQTT (TCP only, password auth) ---
   mosquitto:
-    image: eclipse-mosquitto:2
+    image: eclipse-mosquitto:2.0.22-openssl
     container_name: mosquitto
     restart: unless-stopped
     ports:
@@ -104,7 +104,7 @@ services:
 
 # --- API Service ---
   api:
-    image: hazenai/tms-api:1.5.10
+    image: hazenai/tms-api:1.5.11
     container_name: api
     depends_on:
       mongodb:
@@ -118,7 +118,7 @@ services:
       - "8080:5247"
   # --- Web Service (MVC; server-side calls) ---
   web:
-    image: hazenai/tms-web:2.3.5
+    image: hazenai/tms-web:2.5.0
     container_name: web
     depends_on:
       - api

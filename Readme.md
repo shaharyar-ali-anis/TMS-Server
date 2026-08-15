@@ -88,7 +88,7 @@ sudo docker --version
 
 ### Create a temporary setup folder
 
-We’ll use a temporary folder to hold all installation files. You’ll upload these files manually (via FileZilla or another SFTP client) instead of downloading directly from Google Drive.
+We'll use a temporary folder to hold all installation files. You'll upload these files manually (via FileZilla or another SFTP client) instead of downloading directly from Google Drive.
 
 ```bash
 mkdir -p ~/ems_setup
@@ -101,7 +101,7 @@ cd ~/ems_setup
 1. On your local machine, download all setup files located in the `Dist` folder of the following Github Repo:
 
    * [Github Repo: TMS-Server](https://github.com/shaharyar-ali-anis/TMS-Server/tree/main/dist)
-2. Once downloaded, use FileZilla (or any SFTP tool) to **upload the contents** into the target server’s folder:
+2. Once downloaded, use FileZilla (or any SFTP tool) to **upload the contents** into the target server's folder:
 
    ```bash
    ~/ems_setup
@@ -216,8 +216,15 @@ sudo chmod 400 /opt/hazen-stack/mongodb/keyfile
 
 ### Create Configuration File
 
+Open the file in the editor:
+
 ```bash
-sudo tee /opt/hazen-stack/mosquitto/config/mosquitto.conf > /dev/null <<'EOF'
+sudo nano /opt/hazen-stack/mosquitto/config/mosquitto.conf
+```
+
+Paste the following content into the editor:
+
+```conf
 persistence true
 persistence_location /mosquitto/data/
 listener 1883 0.0.0.0
@@ -231,15 +238,34 @@ log_type notice
 log_type information
 max_packet_size 20971520
 message_size_limit 20971520
-EOF
+```
+
+Save and exit: press `Ctrl+O`, then `Enter`, then `Ctrl+X`.
+
+Verify the file was written correctly:
+
+```bash
+cat /opt/hazen-stack/mosquitto/config/mosquitto.conf
 ```
 **Note:** Maximum image size limited to 20MB
 ### Create Password File
 
 ```bash
-sudo docker run --rm -v /opt/hazen-stack/mosquitto/config:/mosquitto/config eclipse-mosquitto \
-  mosquitto_passwd -c -b /mosquitto/config/passwordfile admin admin6754
+cd /opt/hazen-stack && sudo docker compose run --rm --no-deps --entrypoint mosquitto_passwd mosquitto -c -b /mosquitto/config/passwordfile admin admin6754
 ```
+
+### Set Ownership & Permissions
+
+```bash
+# Mosquitto (UID/GID 1883)
+sudo chown -R 1883:1883 /opt/hazen-stack/mosquitto
+sudo find /opt/hazen-stack/mosquitto -type d -exec chmod 750 {} +
+sudo chmod 640 /opt/hazen-stack/mosquitto/config/mosquitto.conf
+sudo chmod 600 /opt/hazen-stack/mosquitto/config/passwordfile
+```
+
+**Note:** Re-apply these permissions after any future edit of `mosquitto.conf` or
+regeneration of `passwordfile`.
 
 ---
 
@@ -277,10 +303,11 @@ sudo apt update && sudo apt install -y mongodb-database-tools
 ```
 
 ### Restore Databases
-Adjust `<your_user>` to match your actual username if needed.
+Adjust `ubuntu` to match your actual username if needed.
+
 ```bash
-mongorestore --host localhost:27017 -u admin -p admin6754 --authenticationDatabase admin --db portal_db   --archive=/home/<your_user>/ems_setup/portal_db.agz --gzip
-mongorestore --host localhost:27017 -u admin -p admin6754 --authenticationDatabase admin --db traffic_data --archive=/home/<your_user>/ems_setup/traffic_data.agz --gzip
+mongorestore --host localhost:27017 -u admin -p admin6754 --authenticationDatabase admin --db portal_db   --archive=/home/ubuntu/ems_setup/portal_db.agz --gzip
+mongorestore --host localhost:27017 -u admin -p admin6754 --authenticationDatabase admin --db traffic_data --archive=/home/ubuntu/ems_setup/traffic_data.agz --gzip
 ```
 
 ### Verify Collections
@@ -298,7 +325,7 @@ To test the MQTT broker, you need to open **two terminals** — one for subscrib
 1. **In Terminal 1**, run the subscriber command and keep it open:
 
    ```bash
-   sudo docker run --rm -it --network host eclipse-mosquitto mosquitto_sub -h localhost -p 1883 -u admin -P admin6754 -t test/topic -v
+   sudo docker run --rm -it --network host eclipse-mosquitto:2.0.22-openssl mosquitto_sub -h localhost -p 1883 -u admin -P admin6754 -t test/topic -v
    ```
 
    This command will wait and listen for any incoming messages.
@@ -306,7 +333,7 @@ To test the MQTT broker, you need to open **two terminals** — one for subscrib
 2. **In Terminal 2**, run the publisher command:
 
    ```bash
-   sudo docker run --rm -it --network host eclipse-mosquitto mosquitto_pub -h localhost -p 1883 -u admin -P admin6754 -t test/topic -m "hello"
+   sudo docker run --rm -it --network host eclipse-mosquitto:2.0.22-openssl mosquitto_pub -h localhost -p 1883 -u admin -P admin6754 -t test/topic -m "hello"
    ```
 
 If everything is configured correctly, you will see the `hello` message appear in Terminal 1.
@@ -335,10 +362,10 @@ sudo apt install -y nodejs npm && sudo npm install -g pm2@latest
 ```
 
 ### Move Files & Set Permissions
-Adjust `<your_user>` to match your actual username if needed.
+Adjust `ubuntu` to match your actual username if needed.
 ```bash
-sudo mv /home/<your_user>/ems_setup/gateway/{config.env,gateway-linux} /opt/hazen-stack/gateway/
-sudo mv /home/<your_user>/ems_setup/ws-publisher/{config.env,WS-Publisher-linux} /opt/hazen-stack/ws-publisher/
+sudo mv /home/ubuntu/ems_setup/gateway/{config.env,gateway-linux} /opt/hazen-stack/gateway/
+sudo mv /home/ubuntu/ems_setup/ws-publisher/{config.env,WS-Publisher-linux} /opt/hazen-stack/ws-publisher/
 sudo chmod +x /opt/hazen-stack/gateway/gateway-linux /opt/hazen-stack/ws-publisher/WS-Publisher-linux
 ```
 
@@ -386,16 +413,16 @@ sudo env "PATH=$PATH" pm2 startup systemd
 ### Relocate the Virtual Camera App to production folder
 Move VirtualCam out of the temporary setup directory into a permanent runtime path.
 
-Adjust `<your_user>` to match your actual username if needed.
+Adjust `ubuntu` to match your actual username if needed.
 
 ```bash
 sudo mkdir -p /opt/hazen-stack/virtual_cam
-sudo mv /home/<your_user>/ems_setup/virtual_cam/* /opt/hazen-stack/virtual_cam/
+sudo mv /home/ubuntu/ems_setup/virtual_cam/* /opt/hazen-stack/virtual_cam/
 sudo chmod +x /opt/hazen-stack/virtual_cam/VirtualCam-linux
 ```
 
 ### Run the Virtual Camera
-Run from the **app’s directory** so it can load config.env and other local files:
+Run from the **app's directory** so it can load config.env and other local files:
 ```bash
 cd /opt/hazen-stack/virtual_cam
 sudo ./VirtualCam-linux
@@ -445,7 +472,7 @@ On the **ALPR & Violations** page, you can view the history of captured events:
 <img src="https://github.com/shaharyar-ali-anis/TMS-Server/blob/main/images/Records.jpg" alt="records-image" width="800">
 
 \
-Ensure that each event’s images appear correctly:
+Ensure that each event's images appear correctly:
 
 <img src="https://github.com/shaharyar-ali-anis/TMS-Server/blob/main/images/VehicleImage.jpg" alt="event-Image" width="800">
 
@@ -531,12 +558,13 @@ This ensures that MinIO manages capacity intelligently and works together with t
 ---
 ## 13. Cleanup temporary setup folder
 
-Once all services are running and you’ve verified portal access and events, remove the temporary setup folder created in Step 3:
+Once all services are running and you've verified portal access and events, remove the temporary setup folder created in Step 3:
 
 **Important note:** Ensure all required files have already been moved before deleting `ems_setup`.
 
+Adjust `ubuntu` to match your actual username if needed.
 ```bash
-sudo rm -rf /home/<your_user>/ems_setup
+sudo rm -rf /home/ubuntu/ems_setup
 ```
 
 **Do not delete:** `/opt/hazen-stack/docker-compose.yml` — this file is needed for restarting or updating the services later.
@@ -547,7 +575,7 @@ sudo rm -rf /home/<your_user>/ems_setup
 ## 🧩 Troubleshooting Tips
 
 * Use `sudo docker logs <container>` to inspect container issues.
-* If images are not visible, verify the IP in `image_access_endpoint` inside gateway’s `config.env`.
+* If images are not visible, verify the IP in `image_access_endpoint` inside gateway's `config.env`.
 * Check MinIO service health:
   ```bash
   sudo docker ps | grep minio
