@@ -4,6 +4,8 @@
 
 This guide explains how to set up the **EMS On-Premise Server** on Ubuntu 24.04.2 LTS. It covers installation, configuration, and verification steps for Docker, MongoDB, MinIO, Mosquitto, and related services.
 
+HTTPS is the default transport for the portal. The server is reached by IP address only, with no DNS and no domain, so TLS is provided by a self-issued internal certificate authority (CA) generated in Section 5 and trusted on each client machine in Section 13.
+
 All shell commands are provided in **copy-paste friendly code blocks**.
 
 ---
@@ -13,23 +15,29 @@ All shell commands are provided in **copy-paste friendly code blocks**.
 ### System Requirements
 
 * Ubuntu Server/Desktop 24.04.2 LTS
-* Minimum: 4 CPU cores, 8 GB RAM, 100 GB disk space + 500GB disk space for image store *(adjust as per instructions in section 12)*
+* Minimum: 4 CPU cores, 8 GB RAM, 100 GB disk space + 500GB disk space for image store *(adjust as per instructions in section 15)*
 * Internet access for package and image downloads
 
 ### Required Ports
 
-Make sure the following ports are open on your server:
+Only what is needed is exposed. Everything else stays on loopback and is not reachable from the LAN.
 
-| Port | Service       | Description                       |
-| ---- | ------------- | --------------------------------- |
-| 80   | TMS Portal    | Service - Web portal interface    |
-| 8080 | API           | Service - Application backend     |
-| 1880 | WebSocket     | Service - Real-time events        |
-| 1883 | MQTT Broker   | Service - IoT message broker      |
-| 9000 | MinIO         | Service - Object storage (images) |
-| 22   | SSH           | Debug - Remote access             |
-| 9001 | MinIO Console | Debug - Management portal         |
-| 8081 | Mongo Express | Debug - GUI for MongoDB (optional)|
+| Port  | Service        | Description                                   | Default Exposure |
+| ----- | -------------- | --------------------------------------------- | ----------------- |
+| 443   | TMS Portal     | HTTPS portal, SignalR, and event images       | LAN |
+| 80    | Redirect       | 301 to HTTPS, no other function               | LAN |
+| 1883  | MQTT Broker    | Camera ingestion                              | LAN |
+| 22    | SSH            | Remote administration                         | LAN (restrict to admin IPs where your network allows it) |
+| 27017 | MongoDB        | Database, remote DB maintenance               | LAN |
+| 9001  | MinIO Console  | Object storage management UI                  | LAN |
+| 8081  | Mongo Express  | MongoDB debug GUI, launched on demand         | LAN |
+| 8080  | API            | Application backend                           | **Loopback only.** Called internally by the portal |
+| 9000  | MinIO S3 API   | Object storage API                            | **Loopback only.** Served to browsers via `/hazen-tms/` on 443 |
+| 1880  | WS-Publisher   | Internal event stream (PM2 host process)      | **Docker bridge only** |
+
+> ⚠️ **27017, 9001, and 8081 are open by design for remote maintenance.** `docker-compose.yml` ships with default credentials (`admin`/`admin6754` for Mongo and MinIO, `admin`/`1qaz!QAZ` for Mongo Express). Rotate them before this server holds client production data.
+
+If this server has a public IP, a cloud security group or upstream firewall sits in front of the host and takes precedence over both Docker bindings and ufw. See Section 12.
 
 ---
 
@@ -88,8 +96,6 @@ sudo docker --version
 
 ### Create a temporary setup folder
 
-We'll use a temporary folder to hold all installation files. You'll upload these files manually (via FileZilla or another SFTP client) instead of downloading directly from Google Drive.
-
 ```bash
 mkdir -p ~/ems_setup
 cd ~/ems_setup
@@ -101,38 +107,42 @@ cd ~/ems_setup
 1. On your local machine, download all setup files located in the `Dist` folder of the following Github Repo:
 
    * [Github Repo: TMS-Server](https://github.com/shaharyar-ali-anis/TMS-Server/tree/main/dist)
-2. Once downloaded, use FileZilla (or any SFTP tool) to **upload the contents** into the target server's folder:
+2. Using FileZilla (or any SFTP tool), **upload the contents** into the target server's folder:
 
    ```bash
    ~/ems_setup
    ```
-3. Verify that the folder now contains items such as:
+3. Verify that the folder now contains:
 
    * `gateway/` and `ws-publisher/` directories
    * `virtual_cam/` directory
    * `portal_db.agz` and `traffic_data.agz` database archives
    * `mongo-express.sh` (debug helper script)
+   * `docker-compose.yml` (all container services, including nginx, with port bindings per the table above)
+   * `nginx.conf` (TLS termination on 443, 80 to 443 redirect, portal and MinIO image proxying)
+   * `generate_certs.sh` (internal CA and server certificate, used in Section 5)
+
 
 ### Create base directory structure for runtime data
 
-These directories are used by running services (they are not temporary):
+These directories are used by running services and are not temporary.
 
 ```bash
-sudo mkdir -p /opt/hazen-stack/{minio/{data,config},mongodb/data,mosquitto/{config,data},api,gateway,ws-publisher}
+sudo mkdir -p /opt/hazen-stack/{minio/{data,config},mongodb/data,mosquitto/{config,data},api,gateway,ws-publisher,nginx/certs}
 ```
 
-### Move `docker-compose.yml` and `mongo-express.sh` to permanent location
-
-Before starting any containers, move the `docker-compose.yml` & `mongo-express.sh` file out of the temporary setup folder so it is retained for future management:
+### Move `docker-compose.yml`, `nginx.conf`, `generate_certs.sh`, and `mongo-express.sh` to permanent locations
 
 ```bash
 sudo mv ~/ems_setup/docker-compose.yml /opt/hazen-stack/docker-compose.yml
+sudo mv ~/ems_setup/nginx.conf /opt/hazen-stack/nginx/nginx.conf
+sudo mv ~/ems_setup/generate_certs.sh /opt/hazen-stack/nginx/generate_certs.sh
+sudo chmod +x /opt/hazen-stack/nginx/generate_certs.sh
 sudo mv ~/ems_setup/mongo-express.sh /opt/hazen-stack/mongo-express.sh
 sudo chmod +x /opt/hazen-stack/mongo-express.sh
 ```
-`mongo-express.sh` provides a temporary Mongo Express GUI for debugging.
 
-**Note:** The `docker-compose.yml` file defines all container services and must remain under `/opt/hazen-stack` for future restarts
+**Note:** Everything under `/opt/hazen-stack/` is permanent and required for restarts. Deleting `nginx/certs/` means regenerating the CA and re-installing trust on every client machine.
 
 ### Docker Hub Login for Private Images
 
@@ -183,7 +193,7 @@ Before pulling private Docker images, login to Docker Hub using the provided Doc
    ```
    **Note:** This login is saved on the server and normally does not need to be repeated unless the token is changed or revoked.
 
-7. Verify Docker loing
+7. Verify Docker login
    ```bash
    sudo docker info | grep Username
    ```
@@ -212,7 +222,26 @@ sudo chmod 400 /opt/hazen-stack/mongodb/keyfile
 
 ---
 
-## 5. Configure Mosquitto (MQTT Broker)
+## 5. Generate the Internal CA and TLS Certificate
+
+The server IP is written into the certificate SAN and into `image_access_endpoint` (Section 11). Changing it later invalidates the certificate on every client machine and breaks stored image URLs. Assign it statically before running the script.
+
+### Run the certificate script
+
+Replace `<Server-IP>` with the address designated to access the server.
+
+```bash
+cd /opt/hazen-stack/nginx
+sudo SERVER_IP=<Server-IP> ./generate_certs.sh
+```
+
+Confirm the script output shows the correct IP in the SAN line, `server-cert.pem: OK` on the chain check, and matching key/certificate modulus hashes. If anything doesn't match, re-run the script rather than proceeding. nginx will refuse to serve a mismatched key/cert pair.
+
+This must complete before Section 7. The `nginx` container mounts the certs directory read-only and will not start without it.
+
+---
+
+## 6. Configure Mosquitto (MQTT Broker)
 
 ### Create Configuration File
 
@@ -237,7 +266,6 @@ log_type warning
 log_type notice
 log_type information
 max_packet_size 20971520
-message_size_limit 20971520
 ```
 
 Save and exit: press `Ctrl+O`, then `Enter`, then `Ctrl+X`.
@@ -248,6 +276,7 @@ Verify the file was written correctly:
 cat /opt/hazen-stack/mosquitto/config/mosquitto.conf
 ```
 **Note:** Maximum image size limited to 20MB
+
 ### Create Password File
 
 ```bash
@@ -269,19 +298,20 @@ regeneration of `passwordfile`.
 
 ---
 
-## 6. Start Docker Services
+## 7. Start Docker Services
 
-Once all configurations are in place (permissions, keyfile, and Mosquitto setup), start all containers using the `docker-compose.yml` file located in `/opt/hazen-stack`.
+Once all configurations are in place (permissions, keyfile, Mosquitto setup, certificate), start all containers using the `docker-compose.yml` file located in `/opt/hazen-stack`.
 
 ```bash
 cd /opt/hazen-stack
+sudo docker compose config -q && echo "compose file OK"
 sudo docker compose up -d
 ```
 
-Verify running containers:
+Verify running containers. `web`, `api`, `mongodb`, `minio`, `mosquitto`, and `nginx` should all show `Up`, and `healthy` where a healthcheck is defined:
 
 ```bash
-sudo docker ps
+sudo docker compose ps
 ```
 
 If any service fails, review logs:
@@ -290,9 +320,11 @@ If any service fails, review logs:
 sudo docker logs <container_name>
 ```
 
+If nginx restart-loops, the cause is almost always missing certificates from Section 5.
+
 ---
 
-## 7. Initialize MongoDB
+## 8. Initialize MongoDB
 
 ### Install Tools
 
@@ -318,17 +350,15 @@ sudo docker run --rm -it --network host mongo:7 mongosh "mongodb://admin:admin67
 
 ---
 
-## 8. Verify MQTT
+## 9. Verify MQTT
 
-To test the MQTT broker, you need to open **two terminals** — one for subscribing and one for publishing.
+To test the MQTT broker, you need to open **two terminals**, one for subscribing and one for publishing.
 
 1. **In Terminal 1**, run the subscriber command and keep it open:
 
    ```bash
    sudo docker run --rm -it --network host eclipse-mosquitto:2.0.22-openssl mosquitto_sub -h localhost -p 1883 -u admin -P admin6754 -t test/topic -v
    ```
-
-   This command will wait and listen for any incoming messages.
 
 2. **In Terminal 2**, run the publisher command:
 
@@ -343,7 +373,7 @@ If everything is configured correctly, you will see the `hello` message appear i
 
 
 
-## 9. Initialize MinIO
+## 10. Initialize MinIO
 
 ```bash
 sudo docker run --rm --network host -v /tmp/.mc:/root/.mc minio/mc alias set local http://127.0.0.1:9000 admin admin6754
@@ -353,7 +383,7 @@ sudo docker run --rm --network host -v /tmp/.mc:/root/.mc minio/mc anonymous set
 
 ---
 
-## 10. Setup Gateway & WS-Publisher
+## 11. Setup Gateway & WS-Publisher
 
 ### Install Node.js and PM2
 
@@ -382,18 +412,16 @@ rm -f /tmp/minio_keys.txt
 
 ### Update `image_access_endpoint` in Gateway Config
 
-After the MinIO keys are written to `config.env`, update the image endpoint directly via console without opening an editor. Replace `<your_public_or_accessible_ip>` with your actual accessible IP/URL:
+Replace `<Server-IP>` with the same address used in Section 5. There is no port. Images are served through the portal's `/hazen-tms/` path on 443.
 
 ```bash
-sudo sed -i -E "s|^image_access_endpoint *=.*|image_access_endpoint = 'http://<your_public_or_accessible_ip>:9000'|" /opt/hazen-stack/gateway/config.env
+sudo sed -i -E "s|^image_access_endpoint *=.*|image_access_endpoint = 'https://<Server-IP>'|" /opt/hazen-stack/gateway/config.env
 ```
 
 #### Verify the update:
 ```bash
 grep -n "^image_access_endpoint =" /opt/hazen-stack/gateway/config.env
 ```
-
-> This confirms the correct public or local endpoint is configured for browser image retrieval.
 
 ---
 
@@ -408,7 +436,75 @@ sudo env "PATH=$PATH" pm2 startup systemd
 
 ---
 
-## 11. Test the System with Virtual Camera
+## 12. Configure the Firewall
+
+Docker publishes container ports straight into the iptables `DOCKER` chain and bypasses ufw, so `ufw deny 9000` has no effect on a container port. The loopback bindings in `docker-compose.yml` are what close 8080 and 9000. ufw covers host processes and the remaining ports.
+
+```bash
+sudo ufw allow 22/tcp                  # allow SSH first, or you lock yourself out
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+sudo ufw allow 1883/tcp                # MQTT, cameras
+sudo ufw allow 27017/tcp               # MongoDB, remote maintenance
+sudo ufw allow 9001/tcp                # MinIO Console
+sudo ufw allow 8081/tcp                # Mongo Express
+
+# WS-Publisher: Docker bridge only. The allow must precede the deny.
+sudo ufw allow from 172.16.0.0/12 to any port 1880 proto tcp
+sudo ufw deny 1880/tcp
+
+sudo ufw enable
+sudo ufw status numbered
+```
+
+Confirm the actual bridge subnet before relying on the 172.16.0.0/12 assumption above:
+
+```bash
+sudo docker network inspect hazen-stack_default -f '{{range .IPAM.Config}}{{.Subnet}}{{end}}'
+```
+
+From a machine outside the server, not over SSH, confirm the closed ports really are closed:
+
+```bash
+SERVER_IP=<Server-IP>
+for p in 8080 9000 1880; do
+  timeout 3 bash -c "</dev/tcp/${SERVER_IP}/$p" 2>/dev/null \
+    && echo "OPEN  $p  <-- FIX THIS" || echo "closed $p"
+done
+```
+
+All three must return `closed`. 27017, 9001, and 8081 are expected to be open.
+
+**If this server has a public IP**, a cloud security group or router port-forwarding table enforces in front of the host and bypasses ufw. 8080, 9000, and 1880 must not appear in its inbound rules.
+
+---
+
+## 13. Install the Root CA on Client Machines
+
+Distribute `/opt/hazen-stack/nginx/certs/ca.crt` only, never `ca.key`, `server.key`, or `server-key.pem`. One install per machine, permanent. Certificate renewals (Section 17) do not require repeating this.
+
+**Windows** (elevated Command Prompt) covers both Chrome and Edge, since both read the Windows OS trust store:
+
+```cmd
+certutil -addstore -f Root ca.crt
+```
+
+Verify in `certmgr.msc` under Trusted Root Certification Authorities, looking for the CA's CN ("Hazen TMS Internal Root CA"). For Active Directory sites, push the root via Group Policy instead.
+
+**Firefox** does not use the OS certificate store on any platform. Import separately: Settings → Privacy & Security → Certificates → View Certificates → Authorities → Import, and tick "Trust this CA to identify websites".
+
+**macOS:** double-click `ca.crt` to add it to the System keychain, then open it in Keychain Access, expand Trust, and set "When using this certificate" to "Always Trust".
+
+**Linux:**
+
+```bash
+sudo cp ca.crt /usr/local/share/ca-certificates/hazen-tms-root.crt
+sudo update-ca-certificates
+```
+
+---
+
+## 14. Test the System with Virtual Camera
 
 ### Relocate the Virtual Camera App to production folder
 Move VirtualCam out of the temporary setup directory into a permanent runtime path.
@@ -437,15 +533,13 @@ MQTT Broker: 127.0.0.1
 MQTT: Connected
 MQTT: TX: Packet sent to topic > hazen/vistapro/...
 ```
-This confirms successful MQTT and backend communication.
-
 
 ### Login to Webpage
 
-From any browser on the same network, visit:
+Install `ca.crt` on this machine first (Section 13), otherwise the browser will show a trust warning. From any browser on the same network, visit:
 
 ```
-http://<Server-IP>
+https://<Server-IP>
 ```
 
 ### Login using the **Test account**:
@@ -477,12 +571,11 @@ Ensure that each event's images appear correctly:
 <img src="https://github.com/shaharyar-ali-anis/TMS-Server/blob/main/images/VehicleImage.jpg" alt="event-Image" width="800">
 
 ---
-## 12. Storage Management for Images in MinIO Object Store
+## 15. Storage Management for Images in MinIO Object Store
 
 MinIO stores event images generated by EMS. To avoid running out of disk space, configure automated image expiry based on your storage capacity.
 
 ### Calculate Required Storage
-
 
 Use the **TMS Server & Bandwidth Calculator.xls** to estimate:
 
@@ -544,21 +637,17 @@ mc ilm ls myminio/hazen-tms
 
 ### Set MinIO Storage Quota (Recommended)
 
-It is strongly recommended to enforce a **storage quota** on the MinIO bucket to match the maximum allocated storage capacity.
-
-For example, if you have dedicated **500 GB** for image storage, set the bucket quota to **500 GB** so MinIO can prevent uncontrolled growth.
+Set a bucket quota matching the allocated storage capacity so MinIO prevents uncontrolled growth. For 500 GB of dedicated image storage:
 
 ```bash
 mc quota set myminio/hazen-tms --size 500GB
 mc quota info myminio/hazen-tms
 ```
 
-This ensures that MinIO manages capacity intelligently and works together with the ILM (expiry) rules.
-
 ---
-## 13. Cleanup temporary setup folder
+## 16. Cleanup temporary setup folder
 
-Once all services are running and you've verified portal access and events, remove the temporary setup folder created in Step 3:
+Once all services are running and you've verified portal access and events, remove the temporary setup folder created in Section 3:
 
 **Important note:** Ensure all required files have already been moved before deleting `ems_setup`.
 
@@ -567,15 +656,32 @@ Adjust `ubuntu` to match your actual username if needed.
 sudo rm -rf /home/ubuntu/ems_setup
 ```
 
-**Do not delete:** `/opt/hazen-stack/docker-compose.yml` — this file is needed for restarting or updating the services later.
+**Do not delete:** any file in `/opt/hazen-stack/`
 
+---
+
+## 17. Certificate Renewal
+
+The leaf certificate expires after 398 days. The CA is valid for 10 years. Renewing the leaf with the same CA needs no action on any client machine.
+
+```bash
+cd /opt/hazen-stack/nginx
+sudo SERVER_IP=<Server-IP> ./generate_certs.sh   # reuses the existing CA, regenerates only the leaf
+sudo docker exec nginx nginx -s reload
+```
+
+Check the current expiry date and set a reminder roughly 30 days ahead of it:
+
+```bash
+sudo openssl x509 -in /opt/hazen-stack/nginx/certs/server-cert.pem -noout -enddate
+```
 
 ---
 
 ## 🧩 Troubleshooting Tips
 
 * Use `sudo docker logs <container>` to inspect container issues.
-* If images are not visible, verify the IP in `image_access_endpoint` inside gateway's `config.env`.
+* If images are not visible, verify `image_access_endpoint` in gateway's `config.env` reads `https://<Server-IP>` with no port.
 * Check MinIO service health:
   ```bash
   sudo docker ps | grep minio
@@ -599,17 +705,33 @@ Access the Mongo Express at `http://<Server-IP>:8081`. login using ID `admin` PW
 **Note:** *The container runs temporarily and is automatically removed when closed. 
 Use this only for debugging. It is not part of permanent EMS services.*
 
+**TLS-specific issues:**
+
+* **Browser shows "Your connection is not private" or NET::ERR_CERT_AUTHORITY_INVALID:** `ca.crt` is not installed on this machine, or went into the wrong store. Re-run Section 13 and confirm in `certmgr.msc` that the CA appears under Trusted Root Certification Authorities.
+* **`nginx` will not start or restart-loops:** check `sudo docker logs nginx`. Missing certificate files is the most common cause, meaning Section 5 did not complete.
+* **Portal loads but live dashboard events never arrive:** SignalR negotiation failure. Check DevTools Console for mixed-content warnings and confirm `ASPNETCORE_FORWARDEDHEADERS_ENABLED=true` on the `web` container:
+  ```bash
+  sudo docker exec web env | grep ASPNETCORE_FORWARDEDHEADERS
+  ```
+* **Live events lag badly or never render, but the page loads fine:** `nginx.conf` needs `proxy_buffering off;` on the portal location block.
+* **Event images 404:** confirm `image_access_endpoint` per Section 11 and that `pm2 restart gateway` ran after the change.
+* **External port scan shows 8080 or 9000 open:** on a server with a public IP, the cloud security group or router port-forwarding sits in front of the host firewall. See Section 12.
+
 ---
 
 ## ✅ Final Checklist
 
-* [ ] All containers are running (`docker ps`)
-* [ ] Portal loads at `http://<Server-IP>`
-* [ ] Virtual Camera's events are received
+* [ ] All containers are running (`sudo docker compose ps`)
+* [ ] Portal loads at `https://<Server-IP>` with a valid padlock
+* [ ] `ca.crt` installed on every client machine
+* [ ] Virtual Camera's events are received, and images load on the ALPR & Violations page
 * [ ] Production device ID with its client prefix is configured on the actual Camera
+* [ ] External port scan confirms 8080, 9000, and 1880 are unreachable
+* [ ] Default credentials rotated for Mongo, MinIO, and Mongo Express before the server holds client production data
+* [ ] Certificate renewal reminder set for ~368 days out
 
 ---
 
 **Author:** Hazen.ai Operations Team
-**Version:** v1.4
-**Date:** 29th April 2026
+**Version:** v1.7
+**Date:** 16th Aug 2026
