@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # db_ssl_migration.sh
 # Self-contained: no separate .js file needed. Pipes the migration script
-# into mongosh inside the running mongodb container.
+# into mongosh inside the running mongodb container
 #
 # Usage:
 #   sudo bash db_ssl_migration.sh            # dry run (default, nothing written)

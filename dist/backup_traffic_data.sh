@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # backup_traffic_data.sh
 # Dumps traffic_data from the running mongodb container before the image-URL migration.
-# Safe to re-run; each run is timestamped, nothing is overwritten.
+# Safe to re-run; each run is timestamped, nothing is overwritten
 
 set -euo pipefail
 
