@@ -118,7 +118,7 @@ cd ~/ems_setup
    * `virtual_cam/` directory
    * `portal_db.agz` and `traffic_data.agz` database archives
    * `mongo-express.sh` (debug helper script)
-   * `docker-compose.yml` (all container services, including nginx, with port bindings per the table above)
+   * `docker-compose.yml` (all container services, including nginx, with port bindings per the table above, and the custom translations mount on the `web` service)
    * `nginx.conf` (TLS termination on 443, 80 to 443 redirect, portal and MinIO image proxying)
    * `generate_certs.sh` (internal CA and server certificate, used in Section 5)
    * `backup_traffic_data.sh` and `db_ssl_migration.sh` (legacy image URL migration, Appendix A, not used during a fresh install)
@@ -129,9 +129,17 @@ cd ~/ems_setup
 These directories are used by running services and are not temporary.
 
 ```bash
-sudo mkdir -p /opt/hazen-stack/{minio/{data,config},mongodb/data,mosquitto/{config,data},api,gateway,ws-publisher,nginx/certs}
+sudo mkdir -p /opt/hazen-stack/{minio/{data,config},mongodb/data,mosquitto/{config,data},api,gateway,ws-publisher,nginx/certs,web}
 ```
+### Create the custom translations file
 
+`docker-compose.yml` mounts this file into the `web` container. It must exist before Section 7, otherwise Docker creates a directory in its place and `web` fails to start.
+
+An empty object means no overrides. Applying them is covered in Appendix B.
+
+```bash
+echo '{}' | sudo tee /opt/hazen-stack/web/translations.custom.json
+```
 ### Move `docker-compose.yml`, `nginx.conf`, `generate_certs.sh`, `mongo-express.sh`, and the migration scripts to permanent locations
 
 ```bash
@@ -676,6 +684,12 @@ Use this only for debugging. It is not part of permanent EMS services.*
   ```
 * **Live events lag badly or never render, but the page loads fine:** `nginx.conf` needs `proxy_buffering off;` on the portal location block.
 * **Event images 404:** confirm `image_access_endpoint` per Section 11 and that `pm2 restart gateway` ran after the change.
+* **`web` restart-loops after a fresh install:** confirm the translations mount point is a file, not a directory.
+  ```bash
+  ls -l /opt/hazen-stack/web/translations.custom.json
+  ```
+  A leading `d` means the file was missing at first start. Remove it, re-create per Section 3, then `sudo docker compose up -d --force-recreate --no-deps web`.
+
 * **External port scan shows 8080 or 9000 open:** the loopback bindings in `docker-compose.yml` are what close these ports, so check they are still `127.0.0.1:`-prefixed. On a server with a public IP, the cloud security group or router port-forwarding sits in front of the host and must not forward 8080, 9000, or 1880.
 
 ---
@@ -754,8 +768,77 @@ sudo docker exec mongodb mongorestore \
   --db=traffic_data --drop --gzip --archive=/tmp/restore.agz
 sudo docker exec mongodb rm -f /tmp/restore.agz
 ```
+---
+## Appendix B. Customizing Arabic Labels
+
+Optional. Changes the wording of individual Arabic labels in the portal. The file created in Section 3 is already mounted, so only its contents change.
+
+### Step 1. Export the reference file
+
+Lists every label that can be overridden with its current default value.
+
+```bash
+sudo docker cp web:/app/config/translations.reference.json /opt/hazen-stack/web/translations.reference.json
+```
+
+Search the file for the Arabic text as it appears in the portal. The key directly above the matching value is the one to override.
+
+**Note:** Re-export after every web image upgrade. New releases may add labels.
+
+### Step 2. Add the overrides
+
+```bash
+sudo nano /opt/hazen-stack/web/translations.custom.json
+```
+
+Top-level keys are section names from the reference file. List only the labels being changed.
+
+```json
+{
+  "DashboardResource": {
+    "All": "الكل"
+  },
+  "SharedResource": {
+    "LogOut": "خروج"
+  }
+}
+```
+
+Save and exit: press `Ctrl+O`, then `Enter`, then `Ctrl+X`.
+
+Validate the JSON before restarting:
+
+```bash
+python3 -m json.tool /opt/hazen-stack/web/translations.custom.json > /dev/null && echo "JSON OK"
+```
+
+### Step 3. Apply
+
+```bash
+cd /opt/hazen-stack && sudo docker compose up -d --force-recreate --no-deps web
+```
+
+**Note:** `--no-deps` is required. Without it Compose also recreates `mongodb`, `mongo-rs-init`, and `api`. Recreating `web` signs out all logged-in users.
+
+### Step 4. Verify
+
+```bash
+sudo docker compose logs --tail=200 web | grep -i translation
+```
+
+The reported count must match the number of labels in the file. `0` means malformed JSON or key names that do not match the reference file.
+
+Reload the portal and confirm the changed labels. Hard refresh if the old text persists.
+
+### Reverting
+
+```bash
+echo '{}' | sudo tee /opt/hazen-stack/web/translations.custom.json
+cd /opt/hazen-stack && sudo docker compose up -d --force-recreate --no-deps web
+```
 
 ---
+
 **Author:** Hazen.ai Operations Team
-**Version:** v1.8
+**Version:** v1.9
 **Date:** 17th Aug 2026

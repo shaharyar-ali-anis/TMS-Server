@@ -124,6 +124,8 @@ services:
     depends_on:
       - api
     restart: unless-stopped
+    volumes:
+      - /opt/hazen-stack/web/translations.custom.json:/app/config/translations.custom.json:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
